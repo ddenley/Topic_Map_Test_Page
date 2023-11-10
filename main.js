@@ -33,6 +33,7 @@ let SM = tMap.StateManager();
 //Main map
 //TODO: Would like to show the normalized distribution as this is more informative
 let mainMap = tMap.BubbleMap(PM.panel1.c, PM.panel1.w, PM.panel1.h)
+    .toggleTitle('Main Topics')
     .setBubbleClick(selectMainTopic)
     .addDefaultText('Loading...', 2, true)
     .setTooltipChart((t,d)=>{
@@ -51,7 +52,9 @@ let mainMap = tMap.BubbleMap(PM.panel1.c, PM.panel1.w, PM.panel1.h)
 
 
 //Sub map
-let subMap = tMap.BubbleMap(PM.panel2.c, PM.panel2.w, PM.panel2.h)
+let subMap = tMap.BubbleMap(PM.panel2.c, PM.panel2.w + 50, PM.panel2.h)
+    .setMargin([30, 20, 20, 20])
+    .toggleTitle('Sub Topics')
     .setBubbleClick(selectSubTopic)
     .addDefaultText('Click on a bubble to see more topics.', 1, true)
     .setTooltipChart((t,d)=>{
@@ -69,7 +72,9 @@ let subMap = tMap.BubbleMap(PM.panel2.c, PM.panel2.w, PM.panel2.h)
     })
 
 //Word cloud
-let wordcloud = tMap.WordCloud(PM.panel3.c, PM.panel3.w, PM.panel3.h)
+let wordcloud = tMap.WordCloud(PM.panel3.c, PM.panel3.w + 50, PM.panel3.h)
+    .setMargin([20, 10, 10, 10])
+    .toggleTitle('Topic Labels')
     .addDefaultText('Click on a bubble to see more labels.', 1, true)
 
 //----Table tooltip----
@@ -80,11 +85,11 @@ let tableTooltip = d => {
 }
 
 //Document view
-let table = tMap.DocTable(PM.panel4.c, PM.panel4.w, PM.panel4.h)
+let table = tMap.DocTable(PM.panel4.c, PM.panel4.w + 50, PM.panel4.h)
     .addDefaultText('Click on a bubble to see the topic top documents.',1,true)
     .toggleTitle('Top Documents')
     .setColumnsInfo([
-        {title: 'Acronym', accessor: d=>d.docData.project_acronym, tooltip:tableTooltip},
+        //{title: 'Acronym', accessor: d=>d.docData.project_acronym, tooltip:tableTooltip},
         {title:'Title',accessor:d=>d.docData.title, tooltip:tableTooltip},
         {title:'Objective',accessor:d=>shortenText(d.docData.objective, 200), tooltip:tableTooltip}
     ])
@@ -94,10 +99,17 @@ function shortenText(text, length){
     return text.length > length ? text.slice(0,length-3) + '...' : text;
 }
 
-//Trend view
-let trend = tMap.TrendChart(PM.panel5.c, PM.panel5.w, PM.panel5.h)
-    .addDefaultText('Click on a bubble to see the topic trend.',1,true)
+let sumByMonth = DM.getTrendSumByFunction('%Y-%m-%d', '%Y-%m'),
+    sumByYear = DM.getTrendSumByFunction('%Y-%m-%d', '%Y'),
+    trendsRange = ['%Y-%m-%d', '2011-01-01', '2021-01-01'];
 
+//Trend view
+let trend = tMap.TrendChart(PM.panel5.c, PM.panel5.w + 50, PM.panel5.h)
+    .toggleTitle('Topic Trend')
+    .setDateTicks('%Y')
+    .setValueTicks(6, '.1f')
+    .addDefaultText('Click on a bubble to see the topic trend.',1,true)
+    .setMargin([30, 40, 30, 10])
 
 
 //**** Controls****
@@ -115,6 +127,7 @@ let dropdown = tMap.Dropdown(PM.control2.c, PM.control2.w, PM.control2.h)
 
 //Main topic click function
 function selectMainTopic(e,d){
+    mainTopic = d.topicId;
     console.log("Selected main topic: ", d);
     //Update state
     SM.state('mainTopic', d.topicId);
@@ -129,12 +142,24 @@ function selectMainTopic(e,d){
     //Rehighlight from search
     highlightFromLabelSearch();
 
-    //Render trend
-    trend.render([DM.getMainTopicTrend(d.topicId, sumByYear, trendRange)]);
+    console.log("mainTopic:", mainTopic);
+    console.log("sumByYear:", sumByYear);
+    console.log("trendsRange:", trendsRange);
+
+    // Ensure that sumByYear is a function that formats dates.
+    sumByYear = DM.getTrendSumByFunction('%Y-%m-%d', '%Y');
+
+    // Ensure that trendRange is an array specifying the format, start date, and end date.
+    let trendRange = ['%Y-%m-%d', '2011-01-01', '2024-01-01'];
+
+    // Use sumByYear and trendRange correctly in the call to getMainTopicTrend.
+    trend.render([DM.getMainTopicTrend(mainTopic, sumByYear, trendRange)
+        .map(d => { return { date: d.date, value: d.value, layer: 'main' }; })]).adjustTicks();
 }
 
 //Sub topic click function
 function selectSubTopic(e,d){
+    subTopic = d.topicId;
     console.log("Selected sub topic: ", d);
     //Show wordcloud
     SM.state('subTopic', d.topicId);
@@ -145,6 +170,16 @@ function selectSubTopic(e,d){
 
     //Rehighlight from search
     highlightFromLabelSearch();
+
+    // Ensure that sumByYear is a function that formats dates.
+    sumByYear = DM.getTrendSumByFunction('%Y-%m-%d', '%Y');
+
+    // Ensure that trendRange is an array specifying the format, start date, and end date.
+    let trendRange = ['%Y-%m-%d', '2011-01-01', '2024-01-01'];
+
+    // Use sumByYear and trendRange correctly in the call to getMainTopicTrend.
+    trend.render([DM.getSubTopicTrend(subTopic, sumByYear, trendRange)
+        .map(d => { return { date: d.date, value: d.value, layer: 'sub' }; })]).adjustTicks();
 }
 
 //Function to render new sub map
@@ -190,8 +225,6 @@ function topEntriesOnly(entries, n=10){
     return entries.slice(0,n);
 }
 
-let sumByYear = DM.timeFormatConverter('%Y-%m-%d', '%Y'); // Convert to year only format
-let trendRange = ['%Y-%m-%d', '2011-01-01', '2024-01-01']; // Set the correct range
 
 //****Load and Process Data****
 
@@ -204,11 +237,5 @@ DM.loadAndProcessDataFromUrls(urls).then(()=>{
 
     //Set default distribution
     SM.state('distrib', distribution_names[0].distName);
-
-    console.log(DM.data.trend);
-    console.log(DM.getMainTopicTrend('2'));
-    console.log(DM.getMainTopicTrend('5', sumByYear, trendRange));
-
-    // trend.render([DM.getMainTopicTrend('2', sumByYear, trendRange)]);
 
 })
